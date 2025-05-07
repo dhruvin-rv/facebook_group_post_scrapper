@@ -9,10 +9,10 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
 
   const config = new DocumentBuilder()
-    .setTitle('')
-    .setDescription('')
+    .setTitle('Facebook Scraper API')
+    .setDescription('API for scraping Facebook posts and images')
     .setVersion('1.0')
-    .addTag('')
+    .addTag('facebook')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

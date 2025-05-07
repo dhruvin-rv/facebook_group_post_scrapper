@@ -41,8 +41,7 @@ export class GetPostsDto {
   @ApiProperty({
     description:
       'Post url to receive the scraped data from the scrapping service once the scrapping is done',
-    example:
-      'https://example.com/webhook?userId=1234567890&groupId=157048338418951',
+    example: 'http://localhost:3000/test-webhook',
     type: String,
   })
   webHookUrl: string;

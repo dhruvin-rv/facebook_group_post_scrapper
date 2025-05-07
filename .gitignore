@@ -139,3 +139,7 @@ dist
 ./userData
 ./public/images
 ./configs/session-configs.json
+/configs
+/configs/*
+/userData/*
+/public/images/*

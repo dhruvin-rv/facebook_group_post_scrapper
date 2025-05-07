@@ -1,6 +1,6 @@
 import { Body, Controller, Post, Res } from '@nestjs/common';
 import { ScrapperService } from './scrapper.service';
-import { GetPostsDto } from './dto/get-post-.dto';
+import { GetPostsDto } from './dto/get-post.dto';
 import { Response } from 'express';
 
 @Controller('scrapper')
@@ -28,7 +28,7 @@ export class ScrapperController {
         error: startScrapping.message,
       };
 
-      return response.status(401).json(responsePayload);
+      return response.status(400).json(responsePayload);
     }
   }
 }

@@ -8,7 +8,7 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin = require('puppeteer-extra-plugin-stealth');
 import { Browser, BrowserContext, Page } from 'puppeteer';
 import { SessionConfigService } from 'src/session-config/session-config.service';
-import { GetPostsDto } from './dto/get-post-.dto';
+import { GetPostsDto } from './dto/get-post.dto';
 import { ScrapeTrackerService } from 'src/scrape-tracker/scrape-tracker.service';
 import axios from 'axios';
 import * as path from 'path';
@@ -97,15 +97,15 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
 
   async startScrapping(
     data: GetPostsDto,
-  ): Promise<{ status: boolean; message?: string }> {
+  ): Promise<{ status: boolean; message?: string; jobId?: string }> {
     const { userId } = data;
 
-    // Check if scraping is already in progress for this user
-    const currentStatus = this.trackerService.getStatus(userId);
+    // Check if scraping is already in progress for any user
+    const currentStatus = this.trackerService.getStatus();
     if (currentStatus?.isProcessing) {
       return {
         status: false,
-        message: `Scraping already in progress Please wait for it to complete.`,
+        message: `Scraping already in progress. Job ID: ${currentStatus.jobId}`,
       };
     }
 
@@ -121,7 +121,7 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       await this.ensureBrowserIsActive();
       await this.setCookies(c_user, xs);
 
-      this.trackerService.start(userId);
+      const jobId = this.trackerService.start(userId, data.groups);
 
       // Run scraping in background
       this.scrapeInBackground(data).catch((err) => {
@@ -132,6 +132,7 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       return {
         status: true,
         message: 'Scraping started successfully',
+        jobId,
       };
     } catch (error) {
       this.logger.error(`Error during scraping: ${error.message}`);
@@ -267,26 +268,61 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         } catch (error) {
           this.logger.error(`Navigation failed for group ${groupID}: ${error}`);
           this.posts[groupID] = { error: 'Failed to load group page' };
+          this.trackerService.updateGroupStatus(userId, groupID, {
+            postCount: 0,
+            imageCount: 0,
+            error: 'Failed to load group page',
+          });
           continue;
         }
 
         const groupExists = await this.page.$('rect ~ circle');
         if (groupExists) {
           this.posts[groupID] = { error: 'Group does not exist' };
+          this.trackerService.updateGroupStatus(userId, groupID, {
+            postCount: 0,
+            imageCount: 0,
+            error: 'Group does not exist',
+          });
           continue;
         }
 
         const feed = await this.page.$('[role="feed"]');
         if (!feed) {
           this.posts[groupID] = { error: 'Not a member of this private group' };
+          this.trackerService.updateGroupStatus(userId, groupID, {
+            postCount: 0,
+            imageCount: 0,
+            error: 'Not a member of this private group',
+          });
           continue;
         }
 
+        try {
+          await this.page.removeExposedFunction('noMorePosts');
+        } catch (err) {
+          this.logger.warn(
+            `Failed to remove noMorePosts function: ${err.message}`,
+          );
+        }
         await this.page.exposeFunction('noMorePosts', () => {
           this.nextGroup = true;
         });
 
         await this.scrollUntilDone();
+
+        // Update group status after scraping
+        const groupPosts = this.posts[groupID] || {};
+        const postCount = Object.keys(groupPosts).length;
+        const imageCount = Object.values(groupPosts).reduce(
+          (sum, post: any) => sum + (post.images?.length || 0),
+          0,
+        );
+
+        this.trackerService.updateGroupStatus(userId, groupID, {
+          postCount,
+          imageCount: imageCount as number,
+        });
 
         this.tooOldCount = 0;
       }
@@ -332,7 +368,10 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         this.logger.error(`Error during cleanup: ${error.message}`);
       }
       // Mark scraping as complete
-      this.trackerService.complete(userId);
+      const session = this.trackerService.complete(userId);
+      this.logger.log(`✅ Scraping completed for user ${userId}`);
+      this.logger.log(`Total posts: ${session.totalPosts}`);
+      this.logger.log(`Total images: ${session.totalImages}`);
     }
   }
 

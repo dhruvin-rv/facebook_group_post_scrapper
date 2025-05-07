@@ -1,27 +1,59 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Delete } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SessionConfigService } from './session-config.service';
 import { SetConfigDto } from './dto/set-config.dto';
-import { GetConfigDto } from './dto/get-config.dto';
-import { GetAllConfigDto } from './dto/get-all-config.dto';
 
+@ApiTags('session-config')
 @Controller('session-config')
 export class SessionConfigController {
-  constructor(private readonly configService: SessionConfigService) {}
+  constructor(private readonly sessionConfigService: SessionConfigService) {}
 
-  @Post('set-session-config')
-  setConfig(@Body() body: SetConfigDto) {
-    this.configService.setConfig(body.userId, body.key, body.value);
-    return { message: 'Config set' };
+  @Post()
+  @ApiOperation({ summary: 'Set multiple config values for a user' })
+  @ApiResponse({ status: 200, description: 'Config values set successfully' })
+  setConfig(@Body() data: SetConfigDto): void {
+    this.sessionConfigService.setConfig(data);
   }
 
-  @Post('get-session-config')
-  getConfig(@Body() body: GetConfigDto) {
-    const value = this.configService.getConfig(body.userId, body.key);
-    return { value };
+  @Get(':userId/:key')
+  @ApiOperation({ summary: 'Get a specific config value for a user' })
+  @ApiResponse({ status: 200, description: 'Returns the config value' })
+  getConfig(
+    @Param('userId') userId: string,
+    @Param('key') key: string,
+  ): string | undefined {
+    return this.sessionConfigService.getConfig(userId, key);
   }
 
-  @Post('get-all-config')
-  getAll(@Body() body: GetAllConfigDto) {
-    return this.configService.getAllConfig(body.userId);
+  @Get(':userId')
+  @ApiOperation({ summary: 'Get all config values for a user' })
+  @ApiResponse({ status: 200, description: 'Returns all config values' })
+  getAllConfigs(
+    @Param('userId') userId: string,
+  ): { [key: string]: string } | undefined {
+    return this.sessionConfigService.getAllConfigs(userId);
+  }
+
+  @Delete(':userId/:key')
+  @ApiOperation({ summary: 'Delete a specific config value for a user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Config value deleted successfully',
+  })
+  deleteConfig(
+    @Param('userId') userId: string,
+    @Param('key') key: string,
+  ): void {
+    this.sessionConfigService.deleteConfig(userId, key);
+  }
+
+  @Delete(':userId')
+  @ApiOperation({ summary: 'Delete all config values for a user' })
+  @ApiResponse({
+    status: 200,
+    description: 'All config values deleted successfully',
+  })
+  deleteAllConfigs(@Param('userId') userId: string): void {
+    this.sessionConfigService.deleteAllConfigs(userId);
   }
 }

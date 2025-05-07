@@ -2,6 +2,6 @@ import { Module } from '@nestjs/common';
 import { ScrapeTrackerService } from './scrape-tracker.service';
 
 @Module({
-  providers: [ScrapeTrackerService]
+  providers: [ScrapeTrackerService],
 })
 export class ScrapeTrackerModule {}
