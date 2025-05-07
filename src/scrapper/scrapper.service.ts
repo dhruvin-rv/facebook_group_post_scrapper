@@ -49,7 +49,7 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
 
       this.logger.log('Launching browser...');
       this.browser = await puppeteer.launch({
-        headless: false,
+        headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
         userDataDir: this.userDataDir,
       });
