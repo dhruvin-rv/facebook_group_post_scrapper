@@ -29,6 +29,8 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   private groupsToProcess: string[] = [];
   private tooOldCount = 0;
   private nextGroup = false;
+  private readonly IMAGES_DIR = path.join(process.cwd(), 'public', 'images');
+  private readonly userDataDir = path.join(process.cwd(), 'userData');
 
   constructor(
     private readonly sessionConfigService: SessionConfigService,
@@ -41,11 +43,15 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
 
   private async initializeBrowser() {
     try {
+      if (!existsSync(this.userDataDir)) {
+        await fs.mkdir(this.userDataDir, { recursive: true });
+      }
+
       this.logger.log('Launching browser...');
       this.browser = await puppeteer.launch({
         headless: false,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        userDataDir: './userData',
+        userDataDir: this.userDataDir,
       });
 
       this.logger.log('Creating default browser context...');
@@ -358,10 +364,8 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async downloadAndSaveImages() {
-    const publicDir = path.join(process.cwd(), 'public', 'images');
-
-    if (!existsSync(publicDir)) {
-      await fs.mkdir(publicDir, { recursive: true });
+    if (!existsSync(this.IMAGES_DIR)) {
+      await fs.mkdir(this.IMAGES_DIR, { recursive: true });
     }
 
     for (const groupID of Object.keys(this.posts)) {
@@ -372,7 +376,7 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         if (!post.images?.length) continue;
 
         post.images = await Promise.all(
-          post.images.map((url) => this.downloadImage(url, publicDir)),
+          post.images.map((url) => this.downloadImage(url, this.IMAGES_DIR)),
         );
       }
     }
