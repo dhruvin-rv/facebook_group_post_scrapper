@@ -13,6 +13,7 @@ services:
       - NODE_ENV=production
       - CHROMIUM_PATH=/usr/bin/chromium
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - USER_DATA_DIR=/usr/src/app/userData
     restart: unless-stopped
     # Add healthcheck to ensure the service is running properly
     healthcheck:

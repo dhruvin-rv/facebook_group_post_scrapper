@@ -25,9 +25,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdbus-glib-1-2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variable for Puppeteer to find Chromium
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-
 # Create app directory
 WORKDIR /usr/src/app
 

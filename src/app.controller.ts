@@ -13,6 +13,13 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('health')
+  health() {
+    return {
+      status: 'ok',
+    };
+  }
+
   @ApiProperty({
     description:
       'This is the test webhook to receive the data scrapped from the scrapping service once the scrapping for the group is done. it will print the data in the terminal',

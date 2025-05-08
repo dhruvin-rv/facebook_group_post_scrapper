@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin = require('puppeteer-extra-plugin-stealth');
-import { Browser, BrowserContext, Page } from 'puppeteer';
+import { Browser, BrowserContext, LaunchOptions, Page } from 'puppeteer';
 import { SessionConfigService } from 'src/session-config/session-config.service';
 import { GetPostsDto } from './dto/get-post.dto';
 import { ScrapeTrackerService } from 'src/scrape-tracker/scrape-tracker.service';
@@ -14,6 +14,7 @@ import axios from 'axios';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { existsSync, promises as fs } from 'fs';
+import { ConfigService } from '@nestjs/config';
 
 puppeteer.use(StealthPlugin());
 
@@ -30,29 +31,53 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   private tooOldCount = 0;
   private nextGroup = false;
   private readonly IMAGES_DIR = path.join(process.cwd(), 'public', 'images');
-  private readonly userDataDir = path.join(process.cwd(), 'userData');
+  private readonly NODE_ENV: string = 'development';
+  private readonly IS_PRODUCTION: boolean = false;
+  private userDataDir: string;
 
   constructor(
     private readonly sessionConfigService: SessionConfigService,
     private readonly trackerService: ScrapeTrackerService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.NODE_ENV = this.configService.get<string>('NODE_ENV') || 'development';
+    this.IS_PRODUCTION = this.NODE_ENV === 'production';
+    this.logger.log(`Environment: ${this.NODE_ENV}`);
+  }
 
   async onModuleInit() {
     await this.initializeBrowser();
   }
 
   private async initializeBrowser() {
+    const executablePath = this.configService.get<string>('CHROMIUM_PATH');
+    this.userDataDir = this.IS_PRODUCTION
+      ? this.configService.get<string>('USER_DATA_DIR')
+      : path.join(process.cwd(), 'userData');
+
     try {
       if (!existsSync(this.userDataDir)) {
         await fs.mkdir(this.userDataDir, { recursive: true });
       }
 
       this.logger.log('Launching browser...');
-      this.browser = await puppeteer.launch({
-        headless: true,
+
+      const launchOptions: LaunchOptions = {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
         userDataDir: this.userDataDir,
-      });
+        headless: this.IS_PRODUCTION,
+      };
+
+      // Only set executablePath in production if CHROMIUM_PATH is provided
+      if (this.IS_PRODUCTION && executablePath) {
+        launchOptions.executablePath = executablePath;
+      }
+
+      this.logger.log('Is Production: ', this.IS_PRODUCTION);
+      this.logger.log('Executable Path: ', executablePath);
+      this.logger.verbose('Launch Options: ', launchOptions);
+
+      this.browser = await puppeteer.launch(launchOptions);
 
       this.logger.log('Creating default browser context...');
       this.context = await this.browser.createBrowserContext();
