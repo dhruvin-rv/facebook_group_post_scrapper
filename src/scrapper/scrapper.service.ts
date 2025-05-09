@@ -74,8 +74,9 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   }> {
     const executablePath = this.configService.get<string>('CHROMIUM_PATH');
     this.userDataDir = this.IS_PRODUCTION
-      ? this.configService.get<string>('USER_DATA_DIR')
+      ? path.join(process.cwd(), 'userData', userId)
       : path.join(process.cwd(), 'userData', userId);
+    // ? this.configService.get<string>('USER_DATA_DIR')
 
     try {
       if (!existsSync(this.userDataDir)) {
@@ -90,9 +91,9 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         headless: this.IS_PRODUCTION,
       };
 
-      if (this.IS_PRODUCTION && executablePath) {
-        launchOptions.executablePath = executablePath;
-      }
+      // if (this.IS_PRODUCTION && executablePath) {
+      //   launchOptions.executablePath = executablePath;
+      // }
 
       const browser = await puppeteer.launch(launchOptions);
       const context = await browser.createBrowserContext();
