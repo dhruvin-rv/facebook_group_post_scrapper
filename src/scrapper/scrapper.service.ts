@@ -139,6 +139,7 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
     data: GetPostsDto,
   ): Promise<{ status: boolean; message?: string; jobId?: string }> {
     const { userId } = data;
+    this.logger.debug(`Starting scraping for user ${userId}`);
 
     // Check if user already has an active job
     if (this.activeJobs.has(userId)) {
@@ -148,12 +149,19 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
+    this.logger.debug('Retrieving session configs...');
     const c_user = this.sessionConfigService.getConfig(userId, 'c_user');
     const xs = this.sessionConfigService.getConfig(userId, 'xs');
 
     if (!c_user || !xs) {
-      this.logger.error('User not found');
-      return { status: false, message: 'User not found' };
+      this.logger.error(
+        `User not found or missing credentials for user ${userId}`,
+      );
+      this.logger.error(`c_user: ${c_user}, xs: ${xs}`);
+      return {
+        status: false,
+        message: 'User not found or missing credentials',
+      };
     }
 
     try {
@@ -291,11 +299,81 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         await axios.post(webHookUrl, {
           userId,
           data: job.posts,
+          status: 'success',
+          jobId: this.trackerService.getJobId(userId),
+          completedAt: new Date().toISOString(),
+          stats: {
+            totalGroups: groups.length,
+            completedGroups: Object.keys(job.posts).length,
+            totalPosts: Object.values(job.posts).reduce(
+              (sum, group: any) => sum + Object.keys(group).length,
+              0,
+            ),
+            totalImages: Object.values(job.posts).reduce(
+              (sum, group: any) =>
+                sum +
+                Object.values(group).reduce(
+                  (groupSum: number, post: any) =>
+                    groupSum + (post.images?.length || 0),
+                  0,
+                ),
+              0,
+            ),
+          },
         });
         this.logger.log(`✅ Sent data to webhook: ${webHookUrl}`);
       } catch (err) {
         this.logger.error(
           `❌ Failed to send data to webhook: ${webHookUrl} | ${err.message}`,
+        );
+      }
+    } catch (error) {
+      // Send failure notification to webhook
+      try {
+        const failureData = {
+          userId,
+          status: 'failed',
+          jobId: this.trackerService.getJobId(userId),
+          error: {
+            message: error.message,
+            type: error.name,
+            stack: error.stack,
+            timestamp: new Date().toISOString(),
+          },
+          context: {
+            groups: groups,
+            maxPostsAge,
+            maxPostsFromGroup,
+            completedGroups: Object.keys(job.posts).length,
+            partialData: job.posts,
+          },
+          stats: {
+            totalGroups: groups.length,
+            completedGroups: Object.keys(job.posts).length,
+            totalPosts: Object.values(job.posts).reduce(
+              (sum, group: any) => sum + Object.keys(group).length,
+              0,
+            ),
+            totalImages: Object.values(job.posts).reduce(
+              (sum, group: any) =>
+                sum +
+                Object.values(group).reduce(
+                  (groupSum: number, post: any) =>
+                    groupSum + (post.images?.length || 0),
+                  0,
+                ),
+              0,
+            ),
+          },
+        };
+
+        await axios.post(webHookUrl, failureData);
+        this.logger.error(
+          `❌ Sent failure notification to webhook: ${webHookUrl}`,
+        );
+      } catch (webhookError) {
+        this.logger.error(
+          `❌ Failed to send failure notification to webhook: ${webHookUrl} | ${webhookError.message}`,
         );
       }
     } finally {

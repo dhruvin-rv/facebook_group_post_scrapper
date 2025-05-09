@@ -89,8 +89,8 @@ export class SessionConfigService implements OnModuleInit {
   }
 
   getConfig(userId: string, key: string): string | undefined {
+    this.loadConfigs();
     const value = this.configs[userId]?.[key];
-    console.log('🚀 ~ SessionConfigService ~ getConfig ~ value:', value);
 
     if (value === undefined) {
       this.logger.warn(`Config not found for user ${userId}, key ${key}`);

@@ -126,4 +126,8 @@ export class ScrapeTrackerService {
       (session) => session.jobId === jobId,
     );
   }
+
+  getJobId(userId: string): string | undefined {
+    return this.sessions[userId]?.jobId;
+  }
 }
