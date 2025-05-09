@@ -9,6 +9,7 @@ services:
     volumes:
       - ./userData:/usr/src/app/userData
       - ./public/images:/usr/src/app/public/images
+      - ./configs:/usr/src/app/configs
     environment:
       - NODE_ENV=production
       - CHROMIUM_PATH=/usr/bin/chromium

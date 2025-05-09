@@ -43,9 +43,10 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Create directory for browser data and images with proper permissions
-RUN mkdir -p /usr/src/app/userData /usr/src/app/public/images \
-    && chown -R scraper:scraper /usr/src/app/userData /usr/src/app/public/images
+# Create directories with proper permissions
+RUN mkdir -p /usr/src/app/userData /usr/src/app/public/images /usr/src/app/configs \
+    && chown -R scraper:scraper /usr/src/app/userData /usr/src/app/public/images /usr/src/app/configs \
+    && chmod -R 755 /usr/src/app/configs
 
 # Switch to non-root user
 USER scraper
