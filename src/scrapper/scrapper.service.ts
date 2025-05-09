@@ -21,15 +21,20 @@ puppeteer.use(StealthPlugin());
 @Injectable()
 export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ScrapperService.name);
-  private browser: Browser;
-  private context: BrowserContext;
-  private page: Page;
-  private posts = {};
+  private activeJobs: Map<
+    string,
+    {
+      browser: Browser;
+      context: BrowserContext;
+      page: Page;
+      posts: Record<string, any>;
+      tooOldCount: number;
+      nextGroup: boolean;
+    }
+  > = new Map();
   private maxPostsAge = 0;
   private maxPostsFromGroup = 0;
   private groupsToProcess: string[] = [];
-  private tooOldCount = 0;
-  private nextGroup = false;
   private readonly IMAGES_DIR = path.join(process.cwd(), 'public', 'images');
   private readonly NODE_ENV: string = 'development';
   private readonly IS_PRODUCTION: boolean = false;
@@ -46,21 +51,38 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    await this.initializeBrowser();
+    // No need to initialize browser here anymore
   }
 
-  private async initializeBrowser() {
+  async onModuleDestroy() {
+    // Close all active browser instances
+    for (const [userId] of this.activeJobs.entries()) {
+      try {
+        await this.cleanupJobResources(userId);
+      } catch (error) {
+        this.logger.error(
+          `Error cleaning up job for user ${userId}: ${error.message}`,
+        );
+      }
+    }
+  }
+
+  private async initializeBrowserForJob(userId: string): Promise<{
+    browser: Browser;
+    context: BrowserContext;
+    page: Page;
+  }> {
     const executablePath = this.configService.get<string>('CHROMIUM_PATH');
     this.userDataDir = this.IS_PRODUCTION
       ? this.configService.get<string>('USER_DATA_DIR')
-      : path.join(process.cwd(), 'userData');
+      : path.join(process.cwd(), 'userData', userId);
 
     try {
       if (!existsSync(this.userDataDir)) {
         await fs.mkdir(this.userDataDir, { recursive: true });
       }
 
-      this.logger.log('Launching browser...');
+      this.logger.log(`Launching browser for user ${userId}...`);
 
       const launchOptions: LaunchOptions = {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -68,56 +90,49 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         headless: this.IS_PRODUCTION,
       };
 
-      // Only set executablePath in production if CHROMIUM_PATH is provided
       if (this.IS_PRODUCTION && executablePath) {
         launchOptions.executablePath = executablePath;
       }
 
-      this.logger.log('Is Production: ', this.IS_PRODUCTION);
-      this.logger.log('Executable Path: ', executablePath);
-      this.logger.verbose('Launch Options: ', launchOptions);
+      const browser = await puppeteer.launch(launchOptions);
+      const context = await browser.createBrowserContext();
+      const page = await context.newPage();
 
-      this.browser = await puppeteer.launch(launchOptions);
+      // Initialize job-specific data
+      this.activeJobs.set(userId, {
+        browser,
+        context,
+        page,
+        posts: {},
+        tooOldCount: 0,
+        nextGroup: false,
+      });
 
-      this.logger.log('Creating default browser context...');
-      this.context = await this.browser.createBrowserContext();
-      this.page = await this.context.newPage();
-      this.logger.log('Default browser context created.');
+      return { browser, context, page };
     } catch (error) {
-      this.logger.error(`Failed to initialize browser: ${error.message}`);
+      this.logger.error(
+        `Failed to initialize browser for user ${userId}: ${error.message}`,
+      );
       throw error;
     }
   }
 
-  private async ensureBrowserIsActive() {
-    try {
-      // Check if browser is still connected
-      if (!this.browser?.isConnected()) {
-        this.logger.log('Browser is not connected. Reinitializing...');
-        await this.initializeBrowser();
-      }
-
-      // Check if page is still valid
+  private async cleanupJobResources(userId: string) {
+    const job = this.activeJobs.get(userId);
+    if (job) {
       try {
-        await this.page.evaluate(() => true);
+        if (job.page) await job.page.close();
+        if (job.context) await job.context.close();
+        if (job.browser) await job.browser.close();
+        // Clear job data
+        this.activeJobs.delete(userId);
+        this.logger.log(`Cleaned up resources for user ${userId}`);
       } catch (error) {
-        this.logger.log('Page is not valid. Creating new page...');
-        this.page = await this.context.newPage();
+        this.logger.error(
+          `Error cleaning up resources for user ${userId}: ${error.message}`,
+        );
       }
-    } catch (error) {
-      this.logger.error(`Error ensuring browser is active: ${error.message}`);
-      await this.initializeBrowser();
     }
-  }
-
-  async onModuleDestroy() {
-    if (this.browser) {
-      await this.browser.close();
-    }
-  }
-
-  getPage(): Page {
-    return this.page;
   }
 
   async startScrapping(
@@ -125,12 +140,11 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ status: boolean; message?: string; jobId?: string }> {
     const { userId } = data;
 
-    // Check if scraping is already in progress for any user
-    const currentStatus = this.trackerService.getStatus();
-    if (currentStatus?.isProcessing) {
+    // Check if user already has an active job
+    if (this.activeJobs.has(userId)) {
       return {
         status: false,
-        message: `Scraping already in progress. Job ID: ${currentStatus.jobId}`,
+        message: `User ${userId} already has an active scraping job`,
       };
     }
 
@@ -143,15 +157,16 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      await this.ensureBrowserIsActive();
-      await this.setCookies(c_user, xs);
+      const { page } = await this.initializeBrowserForJob(userId);
+      await this.setCookies(page, c_user, xs);
 
       const jobId = this.trackerService.start(userId, data.groups);
 
       // Run scraping in background
-      this.scrapeInBackground(data).catch((err) => {
-        this.logger.error(`Scraping failed: ${err.message}`);
+      this.scrapeInBackground(data, page).catch((err) => {
+        this.logger.error(`Scraping failed for user ${userId}: ${err.message}`);
         this.trackerService.complete(userId);
+        this.cleanupJobResources(userId);
       });
 
       return {
@@ -161,10 +176,134 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       };
     } catch (error) {
       this.logger.error(`Error during scraping: ${error.message}`);
+      await this.cleanupJobResources(userId);
       return {
         status: false,
         message: `Error during scraping: ${error.message}`,
       };
+    }
+  }
+
+  private async setCookies(page: Page, c_user: string, xs: string) {
+    await page.setCookie(
+      { name: 'c_user', value: c_user, domain: '.facebook.com' },
+      { name: 'xs', value: xs, domain: '.facebook.com' },
+    );
+  }
+
+  private async scrapeInBackground(data: GetPostsDto, page: Page) {
+    const { groups, maxPostsAge, maxPostsFromGroup, webHookUrl, userId } = data;
+    const job = this.activeJobs.get(userId);
+    if (!job) {
+      throw new Error(`No active job found for user ${userId}`);
+    }
+
+    try {
+      this.maxPostsAge = Date.now() - maxPostsAge * 60 * 60 * 1000;
+      this.maxPostsFromGroup = maxPostsFromGroup;
+      this.groupsToProcess = groups;
+
+      await page.setRequestInterception(false);
+      await this.attachGraphQLResponseHandler(page);
+
+      for (const groupID of groups) {
+        job.nextGroup = false;
+        this.logger.log(`Scraping group: ${groupID}`);
+
+        try {
+          await page.goto(
+            `https://www.facebook.com/groups/${groupID}/?sorting_setting=CHRONOLOGICAL`,
+            { waitUntil: 'networkidle2' },
+          );
+        } catch (error) {
+          this.logger.error(`Navigation failed for group ${groupID}: ${error}`);
+          job.posts[groupID] = { error: 'Failed to load group page' };
+          this.trackerService.updateGroupStatus(userId, groupID, {
+            postCount: 0,
+            imageCount: 0,
+            error: 'Failed to load group page',
+          });
+          continue;
+        }
+
+        const groupExists = await page.$('rect ~ circle');
+        if (groupExists) {
+          job.posts[groupID] = { error: 'Group does not exist' };
+          this.trackerService.updateGroupStatus(userId, groupID, {
+            postCount: 0,
+            imageCount: 0,
+            error: 'Group does not exist',
+          });
+          continue;
+        }
+
+        const feed = await page.$('[role="feed"]');
+        if (!feed) {
+          job.posts[groupID] = { error: 'Not a member of this private group' };
+          this.trackerService.updateGroupStatus(userId, groupID, {
+            postCount: 0,
+            imageCount: 0,
+            error: 'Not a member of this private group',
+          });
+          continue;
+        }
+
+        try {
+          await page.removeExposedFunction('noMorePosts');
+        } catch (err) {
+          this.logger.warn(
+            `Failed to remove noMorePosts function: ${err.message}`,
+          );
+        }
+        await page.exposeFunction('noMorePosts', () => {
+          job.nextGroup = true;
+        });
+
+        await this.scrollUntilDone(page, job);
+
+        // Update group status after scraping
+        const groupPosts = job.posts[groupID] || {};
+        const postCount = Object.keys(groupPosts).length;
+        const imageCount = Object.values(groupPosts).reduce(
+          (sum, post: any) => sum + (post.images?.length || 0),
+          0,
+        );
+
+        this.trackerService.updateGroupStatus(userId, groupID, {
+          postCount,
+          imageCount: imageCount as number,
+        });
+
+        job.tooOldCount = 0;
+      }
+
+      await this.downloadAndSaveImages(job.posts);
+
+      for (const g of groups) {
+        if (!job.posts[g] || !Object.keys(job.posts[g]).length) {
+          job.posts[g] = {
+            error: `No posts found in last ${this.maxPostsAge} hours`,
+          };
+        }
+      }
+
+      try {
+        await axios.post(webHookUrl, {
+          userId,
+          data: job.posts,
+        });
+        this.logger.log(`✅ Sent data to webhook: ${webHookUrl}`);
+      } catch (err) {
+        this.logger.error(
+          `❌ Failed to send data to webhook: ${webHookUrl} | ${err.message}`,
+        );
+      }
+    } finally {
+      await this.cleanupJobResources(userId);
+      const session = this.trackerService.complete(userId);
+      this.logger.log(`✅ Scraping completed for user ${userId}`);
+      this.logger.log(`Total posts: ${session.totalPosts}`);
+      this.logger.log(`Total images: ${session.totalImages}`);
     }
   }
 
@@ -186,8 +325,16 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async attachGraphQLResponseHandler() {
-    this.page.on('response', async (response) => {
+  private async attachGraphQLResponseHandler(page: Page) {
+    const userId = Array.from(this.activeJobs.entries()).find(
+      ([, job]) => job.page === page,
+    )?.[0];
+
+    if (!userId) {
+      throw new Error('No job found for this page');
+    }
+
+    page.on('response', async (response) => {
       if (
         response.url().includes('/api/graphql') &&
         response.request().method() === 'POST'
@@ -196,14 +343,19 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
           const text = await response.text();
           const lines = text.split('\n').filter((l) => l.trim());
           for (const line of lines) {
-            await this.processGraphQLPayload(JSON.parse(line));
+            await this.processGraphQLPayload(JSON.parse(line), userId);
           }
         } catch {}
       }
     });
   }
 
-  private async processGraphQLPayload(data: any) {
+  private async processGraphQLPayload(data: any, userId: string) {
+    const job = this.activeJobs.get(userId);
+    if (!job) {
+      throw new Error(`No active job found for user ${userId}`);
+    }
+
     const timestamps = [];
 
     const creationTime = this.getPath(data, 'creation_time');
@@ -211,9 +363,9 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       const ts = creationTime * 1000;
       if (ts > this.maxPostsAge) {
         timestamps.push(ts);
-        this.tooOldCount = 0;
+        job.tooOldCount = 0;
       } else {
-        this.tooOldCount++;
+        job.tooOldCount++;
       }
     }
 
@@ -222,9 +374,9 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       const publishTime = this.getPath(JSON.parse(tracking), 'publish_time');
       if (publishTime && publishTime * 1000 > this.maxPostsAge) {
         timestamps.push(publishTime * 1000);
-        this.tooOldCount = 0;
+        job.tooOldCount = 0;
       } else {
-        this.tooOldCount++;
+        job.tooOldCount++;
       }
     }
 
@@ -253,150 +405,11 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       groupID,
     };
 
-    if (!this.posts[groupID]) this.posts[groupID] = {};
-    this.posts[groupID][postID] = finalPost;
+    if (!job.posts[groupID]) job.posts[groupID] = {};
+    job.posts[groupID][postID] = finalPost;
 
-    if (Object.keys(this.posts[groupID]).length >= this.maxPostsFromGroup) {
-      this.nextGroup = true;
-    }
-  }
-
-  async setCookies(c_user: string, xs: string) {
-    await this.page.setCookie(
-      { name: 'c_user', value: c_user, domain: '.facebook.com' },
-      { name: 'xs', value: xs, domain: '.facebook.com' },
-    );
-  }
-
-  private async scrapeInBackground(data: GetPostsDto) {
-    const { groups, maxPostsAge, maxPostsFromGroup, webHookUrl, userId } = data;
-
-    try {
-      this.posts = {};
-      this.tooOldCount = 0;
-      this.maxPostsAge = Date.now() - maxPostsAge * 60 * 60 * 1000;
-      this.maxPostsFromGroup = maxPostsFromGroup;
-      this.groupsToProcess = groups;
-
-      await this.page.setRequestInterception(false);
-      await this.attachGraphQLResponseHandler();
-
-      for (const groupID of groups) {
-        this.nextGroup = false;
-        this.logger.log(`Scraping group: ${groupID}`);
-
-        try {
-          await this.page.goto(
-            `https://www.facebook.com/groups/${groupID}/?sorting_setting=CHRONOLOGICAL`,
-            { waitUntil: 'networkidle2' },
-          );
-        } catch (error) {
-          this.logger.error(`Navigation failed for group ${groupID}: ${error}`);
-          this.posts[groupID] = { error: 'Failed to load group page' };
-          this.trackerService.updateGroupStatus(userId, groupID, {
-            postCount: 0,
-            imageCount: 0,
-            error: 'Failed to load group page',
-          });
-          continue;
-        }
-
-        const groupExists = await this.page.$('rect ~ circle');
-        if (groupExists) {
-          this.posts[groupID] = { error: 'Group does not exist' };
-          this.trackerService.updateGroupStatus(userId, groupID, {
-            postCount: 0,
-            imageCount: 0,
-            error: 'Group does not exist',
-          });
-          continue;
-        }
-
-        const feed = await this.page.$('[role="feed"]');
-        if (!feed) {
-          this.posts[groupID] = { error: 'Not a member of this private group' };
-          this.trackerService.updateGroupStatus(userId, groupID, {
-            postCount: 0,
-            imageCount: 0,
-            error: 'Not a member of this private group',
-          });
-          continue;
-        }
-
-        try {
-          await this.page.removeExposedFunction('noMorePosts');
-        } catch (err) {
-          this.logger.warn(
-            `Failed to remove noMorePosts function: ${err.message}`,
-          );
-        }
-        await this.page.exposeFunction('noMorePosts', () => {
-          this.nextGroup = true;
-        });
-
-        await this.scrollUntilDone();
-
-        // Update group status after scraping
-        const groupPosts = this.posts[groupID] || {};
-        const postCount = Object.keys(groupPosts).length;
-        const imageCount = Object.values(groupPosts).reduce(
-          (sum, post: any) => sum + (post.images?.length || 0),
-          0,
-        );
-
-        this.trackerService.updateGroupStatus(userId, groupID, {
-          postCount,
-          imageCount: imageCount as number,
-        });
-
-        this.tooOldCount = 0;
-      }
-
-      await this.downloadAndSaveImages();
-
-      for (const g of groups) {
-        if (!this.posts[g] || !Object.keys(this.posts[g]).length) {
-          this.posts[g] = {
-            error: `No posts found in last ${this.maxPostsAge} hours`,
-          };
-        }
-      }
-
-      try {
-        await axios.post(webHookUrl, {
-          userId,
-          data: this.posts,
-        });
-        this.logger.log(`✅ Sent data to webhook: ${webHookUrl}`);
-      } catch (err) {
-        this.logger.error(
-          `❌ Failed to send data to webhook: ${webHookUrl} | ${err.message}`,
-        );
-      }
-    } finally {
-      // Cleanup resources
-      try {
-        if (this.page) {
-          await this.page.close();
-          this.page = null;
-        }
-        if (this.context) {
-          await this.context.close();
-          this.context = null;
-        }
-        if (this.browser) {
-          await this.browser.close();
-          this.browser = null;
-        }
-        this.logger.log('Browser resources cleaned up successfully');
-      } catch (error) {
-        this.logger.error(`Error during cleanup: ${error.message}`);
-      }
-      // Mark scraping as complete
-      const session = this.trackerService.complete(userId);
-      this.logger.log(`✅ Scraping completed for user ${userId}`);
-      this.logger.log(`Total posts: ${session.totalPosts}`);
-      this.logger.log(`Total images: ${session.totalImages}`);
+    if (Object.keys(job.posts[groupID]).length >= this.maxPostsFromGroup) {
+      job.nextGroup = true;
     }
   }
 
@@ -427,16 +440,16 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
     return search(obj, 0);
   }
 
-  private async downloadAndSaveImages() {
+  private async downloadAndSaveImages(posts: Record<string, any>) {
     if (!existsSync(this.IMAGES_DIR)) {
       await fs.mkdir(this.IMAGES_DIR, { recursive: true });
     }
 
-    for (const groupID of Object.keys(this.posts)) {
-      if (this.posts[groupID]?.error) continue;
+    for (const groupID of Object.keys(posts)) {
+      if (posts[groupID]?.error) continue;
 
-      for (const postID of Object.keys(this.posts[groupID])) {
-        const post = this.posts[groupID][postID];
+      for (const postID of Object.keys(posts[groupID])) {
+        const post = posts[groupID][postID];
         if (!post.images?.length) continue;
 
         post.images = await Promise.all(
@@ -446,8 +459,11 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async scrollUntilDone() {
-    await this.page.evaluate(() => {
+  private async scrollUntilDone(
+    page: Page,
+    job: { nextGroup: boolean; tooOldCount: number },
+  ) {
+    await page.evaluate(() => {
       window.scrollRetries = 0;
       window.lastY = 0;
     });
@@ -456,10 +472,9 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
 
     await new Promise<void>(async (resolve) => {
       const scrollWithDelay = async () => {
-        const result = await this.page.evaluate(async () => {
+        const result = await page.evaluate(async () => {
           const currentY = window.scrollY;
 
-          // Get random scroll amount between 400 and 800 pixels (increased from 300-700)
           const scrollAmount = Math.floor(Math.random() * 400) + 400;
 
           window.scrollTo({
@@ -479,20 +494,17 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
           };
         });
 
-        // Random delay between 0.5 and 1.5 seconds between scrolls (reduced from 1-3)
         const randomDelay = Math.floor(Math.random() * 1000) + 500;
         await sleep(randomDelay);
 
-        // Occasionally pause for longer (15% chance instead of 20%)
         if (Math.random() < 0.15) {
-          // Pause between 1-2 seconds (reduced from 2-5)
           await sleep(Math.floor(Math.random() * 1000) + 1000);
         }
 
         if (
           result.scrollRetries >= 5 ||
-          this.nextGroup ||
-          this.tooOldCount >= 10
+          job.nextGroup ||
+          job.tooOldCount >= 10
         ) {
           resolve();
         } else {
