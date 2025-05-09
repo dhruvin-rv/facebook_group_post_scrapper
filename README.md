@@ -1,73 +1,80 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# Facebook Group Scraper
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+<div align="center">
+  <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
+  <img src="https://img.shields.io/badge/NestJS-EA2845?style=for-the-badge&logo=nestjs&logoColor=white" alt="NestJS"/>
+  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
+</div>
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Overview
 
-## Description
+Facebook Group Scraper is a powerful tool for collecting posts and images from Facebook groups. It provides both a hosted service for end-users and an open-source solution for developers.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Documentation
 
-## Installation
+### For End Users
+If you're looking to use the hosted service, check out our [User Guide](README-USER.md) which includes:
+- Quick start guide
+- API reference
+- Webhook integration
+- Best practices
+- Common issues and solutions
+- Service limits and pricing
 
-```bash
-$ npm install
-```
+[📖 Read the User Guide](README-USER.md)
 
-## Running the app
+### For Developers
+If you're a developer looking to contribute or self-host, check out our [Developer Documentation](README-DEV.md) which includes:
+- Technical stack details
+- Development setup
+- Project structure
+- Architecture overview
+- API documentation
+- Contributing guidelines
 
-```bash
-# development
-$ npm run start
+[👨‍💻 Read the Developer Documentation](README-DEV.md)
 
-# watch mode
-$ npm run start:dev
+## Quick Links
 
-# production mode
-$ npm run start:prod
-```
+### User Resources
+- [Getting Started](README-USER.md#quick-start)
+- [API Reference](README-USER.md#api-reference)
+- [Webhook Integration](README-USER.md#webhook-integration)
+- [Support](README-USER.md#support)
 
-## Test
+### Developer Resources
+- [Development Setup](README-DEV.md#development-setup)
+- [Project Structure](README-DEV.md#project-structure)
+- [Architecture](README-DEV.md#architecture)
+- [Contributing](README-DEV.md#contributing)
 
-```bash
-# unit tests
-$ npm run test
+## Features
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
+- 🔄 Concurrent scraping of multiple Facebook groups
+- 📸 Automatic image downloading and storage
+- 🔒 Secure session management
+- ⏱️ Configurable post age limits
+- 📊 Post count limits per group
+- 🔔 Webhook notifications
+- 🛡️ Stealth mode to avoid detection
+- 🧹 Automatic resource cleanup
 
 ## Support
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- For end-user support: [User Guide Support Section](README-USER.md#support)
+- For developer support: [Developer Documentation Support](README-DEV.md#contributing)
+- For bug reports: [GitHub Issues](https://github.com/your-repo/issues)
 
 ## License
 
-Nest is [MIT licensed](LICENSE).
+[Your License Here]
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](README-DEV.md#contributing) for more information.
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ by [Your Team Name]</sub>
+</div>
