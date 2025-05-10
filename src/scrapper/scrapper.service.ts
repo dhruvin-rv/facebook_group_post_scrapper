@@ -74,9 +74,8 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
   }> {
     const executablePath = this.configService.get<string>('CHROMIUM_PATH');
     this.userDataDir = this.IS_PRODUCTION
-      ? path.join(process.cwd(), 'userData', userId)
+      ? this.configService.get<string>('USER_DATA_DIR')
       : path.join(process.cwd(), 'userData', userId);
-    // ? this.configService.get<string>('USER_DATA_DIR')
 
     try {
       if (!existsSync(this.userDataDir)) {
@@ -86,18 +85,40 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Launching browser for user ${userId}...`);
 
       const launchOptions: LaunchOptions = {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--disable-web-security',
+          '--disable-features=site-per-process',
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--window-size=1920,1080',
+        ],
+        defaultViewport: { width: 1920, height: 1080 },
         userDataDir: this.userDataDir,
         headless: this.IS_PRODUCTION,
       };
 
-      // if (this.IS_PRODUCTION && executablePath) {
-      //   launchOptions.executablePath = executablePath;
-      // }
+      if (this.IS_PRODUCTION && executablePath) {
+        launchOptions.executablePath = executablePath;
+      }
 
       const browser = await puppeteer.launch(launchOptions);
       const context = await browser.createBrowserContext();
       const page = await context.newPage();
+
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36',
+      );
+
+      await page.setExtraHTTPHeaders({
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        Connection: 'keep-alive',
+        'Accept-Encoding': 'gzip, deflate, br',
+      });
 
       // Initialize job-specific data
       this.activeJobs.set(userId, {

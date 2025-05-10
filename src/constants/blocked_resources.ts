@@ -1,0 +1,33 @@
+export const blockResourceType = [
+  'beacon',
+  'csp_report',
+  'font',
+  'image',
+  'video',
+  'imageset',
+  'media',
+  'object',
+  'texttrack',
+  'stylesheet',
+];
+
+export const blockResourceName = [
+  'adition',
+  'adzerk',
+  'analytics',
+  'cdn.api.twitter',
+  'clicksor',
+  'clicktale',
+  'doubleclick',
+  'exelator',
+  'fontawesome',
+  'google',
+  'google-analytics',
+  'googletagmanager',
+  'mixpanel',
+  'optimizely',
+  'quantserve',
+  'sharethrough',
+  'tiqcdn',
+  'zedo',
+];
