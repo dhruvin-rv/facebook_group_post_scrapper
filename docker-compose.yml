@@ -16,6 +16,8 @@ services:
       - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=${PUPPETEER_SKIP_CHROMIUM_DOWNLOAD}
       - USER_DATA_DIR=${USER_DATA_DIR}
       - PORT=${PORT}
+      - PROXY_USERNAME=${PROXY_USERNAME}
+      - PROXY_PASSWORD=${PROXY_PASSWORD}
     restart: unless-stopped
     # Add healthcheck to ensure the service is running properly
     healthcheck:

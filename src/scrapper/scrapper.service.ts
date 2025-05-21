@@ -82,7 +82,24 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         await fs.mkdir(this.userDataDir, { recursive: true });
       }
 
-      this.logger.log(`Launching browser for user ${userId}...`);
+      // Get proxy configuration
+      const proxyConfig = this.sessionConfigService.getProxy(userId);
+      if (!proxyConfig) {
+        throw new Error(
+          'No proxy configuration found. Please set up user configuration first.',
+        );
+      }
+
+      this.logger.log(`Launching browser for user ${userId} with proxy...`);
+
+      // Parse proxy URL properly
+      const proxyUrl = new URL(`http://${proxyConfig.proxy}`);
+      const proxyHost = proxyUrl.hostname;
+      const proxyPort = proxyUrl.port;
+      const username = proxyUrl.username;
+      const password = proxyUrl.password;
+
+      this.logger.debug(`Configuring proxy: ${proxyHost}:${proxyPort}`);
 
       const launchOptions: LaunchOptions = {
         args: [
@@ -94,7 +111,9 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
           '--disable-dev-shm-usage',
           '--disable-accelerated-2d-canvas',
           '--disable-gpu',
+          '--disable-sync',
           '--window-size=1920,1080',
+          `--proxy-server=${proxyHost}:${proxyPort}`,
         ],
         defaultViewport: { width: 1920, height: 1080 },
         userDataDir: this.userDataDir,
@@ -108,6 +127,30 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       const browser = await puppeteer.launch(launchOptions);
       const context = await browser.createBrowserContext();
       const page = await context.newPage();
+
+      await page.authenticate({
+        username,
+        password,
+      });
+
+      await page.setRequestInterception(true);
+
+      page.on('request', (req) => {
+        const blockedResourceTypes = ['image', 'media'];
+        const url = req.url();
+
+        // Block requests for specified resource types or common ad tracking URLs
+        if (
+          blockedResourceTypes.includes(req.resourceType()) ||
+          url.includes('google-analytics') ||
+          url.includes('doubleclick') ||
+          url.includes('facebook.com/tr/') // tracking pixel
+        ) {
+          return req.abort();
+        }
+
+        return req.continue();
+      });
 
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36',
@@ -221,6 +264,76 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  private async navigateToGroup(
+    page: Page,
+    groupID: string,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    details?: string;
+  }> {
+    try {
+      const response = await Promise.race([
+        page.goto(
+          `https://www.facebook.com/groups/${groupID}/?sorting_setting=CHRONOLOGICAL`,
+          {
+            waitUntil: 'networkidle2',
+            timeout: 60000, // 60 seconds timeout
+          },
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Navigation timeout')), 60000),
+        ),
+      ]);
+
+      if (!response) {
+        return {
+          success: false,
+          error: 'Failed to load group page',
+          details: 'Navigation timeout or no response received',
+        };
+      }
+
+      if (response.status() >= 400) {
+        return {
+          success: false,
+          error: 'Failed to load group page',
+          details: `HTTP status: ${response.status()} - ${response.statusText()}`,
+        };
+      }
+
+      // Check for specific error indicators on the page
+      const errorIndicators = await Promise.all([
+        page.$('rect ~ circle'), // Group doesn't exist
+        page.$('[role="feed"]'), // Not a member
+      ]);
+
+      if (errorIndicators[0]) {
+        return {
+          success: false,
+          error: 'Group does not exist',
+          details: 'Found group non-existence indicator on page',
+        };
+      }
+
+      if (!errorIndicators[1]) {
+        return {
+          success: false,
+          error: 'Not a member of this private group',
+          details: 'Feed element not found on page',
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Navigation failed',
+        details: error.message || 'Unknown error occurred during navigation',
+      };
+    }
+  }
+
   private async scrapeInBackground(data: GetPostsDto, page: Page) {
     const { groups, maxPostsAge, maxPostsFromGroup, webHookUrl, userId } = data;
     const job = this.activeJobs.get(userId);
@@ -233,47 +346,26 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       this.maxPostsFromGroup = maxPostsFromGroup;
       this.groupsToProcess = groups;
 
-      await page.setRequestInterception(false);
       await this.attachGraphQLResponseHandler(page);
 
       for (const groupID of groups) {
         job.nextGroup = false;
         this.logger.log(`Scraping group: ${groupID}`);
 
-        try {
-          await page.goto(
-            `https://www.facebook.com/groups/${groupID}/?sorting_setting=CHRONOLOGICAL`,
-            { waitUntil: 'networkidle2' },
+        const navigationResult = await this.navigateToGroup(page, groupID);
+
+        if (!navigationResult.success) {
+          this.logger.error(
+            `Navigation failed for group ${groupID}: ${navigationResult.error} - ${navigationResult.details}`,
           );
-        } catch (error) {
-          this.logger.error(`Navigation failed for group ${groupID}: ${error}`);
-          job.posts[groupID] = { error: 'Failed to load group page' };
+          job.posts[groupID] = {
+            error: navigationResult.error,
+            details: navigationResult.details,
+          };
           this.trackerService.updateGroupStatus(userId, groupID, {
             postCount: 0,
             imageCount: 0,
-            error: 'Failed to load group page',
-          });
-          continue;
-        }
-
-        const groupExists = await page.$('rect ~ circle');
-        if (groupExists) {
-          job.posts[groupID] = { error: 'Group does not exist' };
-          this.trackerService.updateGroupStatus(userId, groupID, {
-            postCount: 0,
-            imageCount: 0,
-            error: 'Group does not exist',
-          });
-          continue;
-        }
-
-        const feed = await page.$('[role="feed"]');
-        if (!feed) {
-          job.posts[groupID] = { error: 'Not a member of this private group' };
-          this.trackerService.updateGroupStatus(userId, groupID, {
-            postCount: 0,
-            imageCount: 0,
-            error: 'Not a member of this private group',
+            error: `${navigationResult.error}: ${navigationResult.details}`,
           });
           continue;
         }

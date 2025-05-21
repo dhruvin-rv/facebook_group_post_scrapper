@@ -11,8 +11,8 @@ export class SessionConfigController {
   @Post()
   @ApiOperation({ summary: 'Set multiple config values for a user' })
   @ApiResponse({ status: 200, description: 'Config values set successfully' })
-  setConfig(@Body() data: SetConfigDto): void {
-    this.sessionConfigService.setConfig(data);
+  async setConfig(@Body() data: SetConfigDto): Promise<void> {
+    await this.sessionConfigService.setConfig(data);
   }
 
   @Get(':userId/:key')
