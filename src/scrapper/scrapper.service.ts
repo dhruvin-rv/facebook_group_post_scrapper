@@ -119,6 +119,10 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         userDataDir: this.userDataDir,
         headless: this.IS_PRODUCTION,
       };
+      console.log(
+        '🚀 ~ ScrapperService ~ initializeBrowserForJob ~ launchOptions: LaunchOptions.this.userDataDir:',
+        this.userDataDir,
+      );
 
       if (this.IS_PRODUCTION && executablePath) {
         launchOptions.executablePath = executablePath;
