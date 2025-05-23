@@ -1,4 +1,4 @@
-# Use Node.js 20 version
+# Use Node.js 20 slim version
 FROM node:20-slim
 
 # Install Chromium and required dependencies
@@ -28,31 +28,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create app directory
 WORKDIR /usr/src/app
 
-# Create a non-root user
-RUN groupadd -r scraper && useradd -r -g scraper scraper
+# Create a non-root user with home directory
+RUN groupadd -g 1001 scraper && useradd -u 1001 -g scraper -m -d /home/scraper scraper
 
-# Copy package files
-COPY package*.json ./
-
-# Install app dependencies
-RUN npm install
-
-# Copy app source
-COPY . .
-
-# Build the application
-RUN npm run build
-
-# Create directories with proper permissions
+# Create writable directories with proper permissions
 RUN mkdir -p /usr/src/app/userData /usr/src/app/public/images /usr/src/app/configs \
-    && chown -R scraper:scraper /usr/src/app/userData /usr/src/app/public/images /usr/src/app/configs \
-    && chmod -R 755 /usr/src/app/userData /usr/src/app/public/images /usr/src/app/configs
+    && chown -R scraper:scraper /usr/src/app
 
 # Switch to non-root user
 USER scraper
+
+# Copy package files and install
+COPY --chown=scraper:scraper package*.json ./
+RUN npm install
+
+# Copy app source
+COPY --chown=scraper:scraper . .
+
+# Build the application
+RUN npm run build
 
 # Expose the port your app runs on
 EXPOSE 3000
 
 # Start the application
-CMD ["npm", "run", "start:prod"] 
+CMD ["npm", "run", "start:prod"]
