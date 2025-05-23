@@ -5,7 +5,7 @@ services:
     build: .
     container_name: fb-scraper
     ports:
-      - "${PORT:-3000}:${3000}"
+      - "${PORT}:${PORT}"
     volumes:
       - ./userData:/usr/src/app/userData
       - ./public/images:/usr/src/app/public/images
