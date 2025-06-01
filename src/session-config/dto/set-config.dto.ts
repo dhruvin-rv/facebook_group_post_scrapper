@@ -4,22 +4,24 @@ import {
   IsArray,
   ValidateNested,
   ArrayMinSize,
+  IsBoolean,
+  IsOptional,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ConfigItemDto {
   @IsString()
-  @ApiProperty({ example: 'theme', description: 'The config key to set' })
+  @ApiProperty({ example: 'c_user', description: 'The config key to set' })
   key: string;
 
   @IsString()
-  @ApiProperty({ example: 'dark', description: 'The value of the config key' })
+  @ApiProperty({ example: 'xs', description: 'The value of the config key' })
   value: string;
 }
 
 export class SetConfigDto {
   @IsString()
-  @ApiProperty({ example: 'user123', description: 'The ID of the user' })
+  @ApiProperty({ example: '1', description: 'The ID of the user' })
   userId: string;
 
   @IsArray()
@@ -29,10 +31,18 @@ export class SetConfigDto {
   @ApiProperty({
     type: [ConfigItemDto],
     example: [
-      { key: 'theme', value: 'dark' },
-      { key: 'language', value: 'en' },
+      { key: 'c_user', value: 'dark' },
+      { key: 'xs', value: 'en' },
     ],
     description: 'Array of key-value pairs to set',
   })
   configs: ConfigItemDto[];
+
+  @IsBoolean()
+  @IsOptional()
+  @ApiProperty({
+    example: true,
+    description: 'Whether to use a proxy for the session',
+  })
+  useProxy?: boolean;
 }

@@ -82,25 +82,6 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
         await fs.mkdir(this.userDataDir, { recursive: true });
       }
 
-      // Get proxy configuration
-      const proxyConfig = this.sessionConfigService.getProxy(userId);
-      if (!proxyConfig) {
-        throw new Error(
-          'No proxy configuration found. Please set up user configuration first.',
-        );
-      }
-
-      this.logger.log(`Launching browser for user ${userId} with proxy...`);
-
-      // Parse proxy URL properly
-      const proxyUrl = new URL(`http://${proxyConfig.proxy}`);
-      const proxyHost = proxyUrl.hostname;
-      const proxyPort = proxyUrl.port;
-      const username = proxyUrl.username;
-      const password = proxyUrl.password;
-
-      this.logger.debug(`Configuring proxy: ${proxyHost}:${proxyPort}`);
-
       const launchOptions: LaunchOptions = {
         args: [
           '--disable-features=IsolateOrigins,site-per-process',
@@ -113,16 +94,38 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
           '--disable-gpu',
           '--disable-sync',
           '--window-size=1920,1080',
-          `--proxy-server=${proxyHost}:${proxyPort}`,
         ],
         defaultViewport: { width: 1920, height: 1080 },
         userDataDir: this.userDataDir,
         headless: this.IS_PRODUCTION,
       };
-      console.log(
-        '🚀 ~ ScrapperService ~ initializeBrowserForJob ~ launchOptions: LaunchOptions.this.userDataDir:',
-        this.userDataDir,
-      );
+
+      let username = '';
+      let password = '';
+
+      const useProxy = this.sessionConfigService.getConfig(userId, 'useProxy');
+
+      if (useProxy) {
+        const proxyConfig = this.sessionConfigService.getProxy(userId);
+        if (!proxyConfig) {
+          throw new Error(
+            'No proxy configuration found. Please set up user configuration first.',
+          );
+        }
+
+        this.logger.log(`Launching browser for user ${userId} with proxy...`);
+
+        // Parse proxy URL properly
+        const proxyUrl = new URL(`http://${proxyConfig.proxy}`);
+        const proxyHost = proxyUrl.hostname;
+        const proxyPort = proxyUrl.port;
+        username = proxyUrl.username;
+        password = proxyUrl.password;
+
+        this.logger.debug(`Configuring proxy: ${proxyHost}:${proxyPort}`);
+
+        launchOptions.args.push(`--proxy-server=${proxyHost}:${proxyPort}`);
+      }
 
       if (this.IS_PRODUCTION && executablePath) {
         launchOptions.executablePath = executablePath;
@@ -132,10 +135,12 @@ export class ScrapperService implements OnModuleInit, OnModuleDestroy {
       const context = await browser.createBrowserContext();
       const page = await context.newPage();
 
-      await page.authenticate({
-        username,
-        password,
-      });
+      if (useProxy) {
+        await page.authenticate({
+          username,
+          password,
+        });
+      }
 
       await page.setRequestInterception(true);
 

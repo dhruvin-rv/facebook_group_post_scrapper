@@ -24,11 +24,12 @@ A user-friendly service for collecting posts and images from Facebook groups. Th
          "key": "xs",
          "value": "your_xs_value"
        }
-     ]
+     ],
+     "useProxy": true
    }
    ```
    
-   Note: Save this `userId` as you'll need it for scraping jobs.
+   Note: Save this `userId` as you'll need it for scraping jobs. If `useProxy` is set to true, a proxy will be automatically generated and assigned to your session.
 
 2. **Start Scraping**
 
@@ -66,7 +67,8 @@ To run multiple scraping jobs simultaneously:
          "key": "xs",
          "value": "your_xs_value"
        }
-     ]
+     ],
+     "useProxy": true
    }
    ```
 
@@ -83,7 +85,8 @@ To run multiple scraping jobs simultaneously:
          "key": "xs",
          "value": "your_xs_value"
        }
-     ]
+     ],
+     "useProxy": true
    }
    ```
 
@@ -133,7 +136,8 @@ To run multiple scraping jobs simultaneously:
            "key": "xs",
            "value": "your_xs_value"
          }
-       ]
+       ],
+       "useProxy": true
      }
      ```
 
@@ -153,7 +157,11 @@ To run multiple scraping jobs simultaneously:
            "key": "xs",
            "value": "your_xs_value"
          }
-       ]
+       ],
+       "proxy": {
+         "proxy": "username__password@host:port",
+         "lastUpdated": "2024-03-20T12:00:00Z"
+       }
      }
      ```
 
@@ -169,8 +177,17 @@ To run multiple scraping jobs simultaneously:
    - Keep your cookie values secure
    - Rotate sessions periodically
    - Delete unused sessions
+   - Use proxies to avoid IP-based restrictions
+   - Monitor proxy health and performance
 
-2. **Parallel Scraping**
+2. **Proxy Usage**
+   - Enable proxy usage by setting `useProxy: true` in session config
+   - Each user session can have its own dedicated proxy
+   - Proxies are automatically generated and assigned
+   - Proxy configuration is stored securely
+   - Monitor proxy performance and rotate if needed
+
+3. **Parallel Scraping**
    - Create separate user IDs for parallel jobs
    - Monitor job status for each user ID
    - Don't exceed service limits
@@ -295,65 +312,3 @@ Your webhook will receive data in this format:
    - Process webhook data promptly
    - Store images securely
    - Backup important data
-
-## Common Issues
-
-1. **Session Problems**
-   - Session expired
-   - Invalid credentials
-   - Access denied
-
-2. **Scraping Issues**
-   - Group not found
-   - Access denied
-   - Rate limited
-
-3. **Webhook Problems**
-   - Timeout
-   - Invalid response
-   - Connection issues
-
-## Support
-
-### Getting Help
-
-1. **Documentation**
-   - Check this guide
-   - Review API docs
-   - Read FAQs
-
-2. **Contact Support**
-   - Email: support@example.com
-   - Response time: 24 hours
-   - Include job ID in queries
-
-### Reporting Issues
-
-When reporting issues, include:
-- Job ID
-- User ID
-- Error message
-- Steps to reproduce
-- Expected behavior
-
-## Service Limits
-
-- COMING SOON
-
-## Security
-
-- COMING SOON
-
-## Pricing
-
-Contact sales for pricing details:
-- Basic plan
-- Professional plan
-- Enterprise plan
-
-## Terms of Service
-
-- Acceptable use policy
-- Data retention policy
-- Service level agreement
-- Privacy policy 

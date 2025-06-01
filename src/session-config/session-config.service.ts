@@ -116,8 +116,12 @@ export class SessionConfigService implements OnModuleInit {
       this.logger.log(`Set config ${config.key} for user ${userId}`);
     }
 
-    // Generate proxy if not exists
-    if (!this.configs[userId].proxy) {
+    // Generate proxy if not exists and need to use proxy
+    console.log(
+      '🚀 ~ SessionConfigService ~ setConfig ~ data.useProxy:',
+      data.useProxy,
+    );
+    if (!this.configs[userId].proxy && data.useProxy) {
       try {
         await this.generateProxy(userId);
         this.logger.log(`Generated and assigned new proxy for user ${userId}`);
@@ -125,7 +129,6 @@ export class SessionConfigService implements OnModuleInit {
         this.logger.error(
           `Failed to generate proxy for user ${userId}: ${error.message}`,
         );
-        // We don't throw here as proxy failure shouldn't block config setting
       }
     }
 
